@@ -68,8 +68,8 @@ const scaffoldEthProvider = navigator.onLine
   : null;
 const poktMainnetProvider = navigator.onLine
   ? new ethers.providers.StaticJsonRpcProvider(
-      "https://eth-mainnet.gateway.pokt.network/v1/lb/611156b4a585a20035148406",
-    )
+    "https://eth-mainnet.gateway.pokt.network/v1/lb/611156b4a585a20035148406",
+  )
   : null;
 const mainnetInfura = navigator.onLine
   ? new ethers.providers.StaticJsonRpcProvider("https://mainnet.infura.io/v3/" + INFURA_ID)
@@ -163,13 +163,15 @@ const web3Modal = new Web3Modal({
   },
 });
 
+let interval;
+
 function App(props) {
   const mainnetProvider =
     poktMainnetProvider && poktMainnetProvider._isProvider
       ? poktMainnetProvider
       : scaffoldEthProvider && scaffoldEthProvider._network
-      ? scaffoldEthProvider
-      : mainnetInfura;
+        ? scaffoldEthProvider
+        : mainnetInfura;
 
   const [injectedProvider, setInjectedProvider] = useState();
   const [address, setAddress] = useState();
@@ -265,7 +267,33 @@ function App(props) {
   console.log("📟 stake events:", stakeEvents);
 
   // ** keep track of a variable from the contract in the local React state:
-  const timeLeft = useContractReader(readContracts, "Staker", "timeLeft");
+  const deadline = useContractReader(readContracts, "Staker", "deadline");
+  const [timeLeft, setTimeLeft] = useState();
+  useEffect(() => {
+    // setTimeLeft(deadline - new Date().getTime() / 1000);
+    if (deadline) {
+      const initialTimeLeft = deadline.toNumber() - Math.floor(new Date().getTime() / 1000);
+      setTimeLeft(initialTimeLeft > 0 ? initialTimeLeft : 0);
+      interval = setInterval(() => {
+        if (timeLeft > 0) {
+          setTimeLeft(time => {
+            if (time > 0) {
+              return time - 1;
+            } else {
+              clearInterval(interval);
+              return 0;
+            }
+          });
+        } else {
+          clearInterval(interval);
+          interval = null;
+        }
+      }, 1000);
+    }
+    return () => {
+      interval && clearInterval(interval);
+    };
+  }, [deadline]);
   console.log("⏳ timeLeft:", timeLeft);
 
   // ** Listen for when the contract has been 'completed'
@@ -518,7 +546,7 @@ function App(props) {
 
             <div style={{ padding: 8, marginTop: 32 }}>
               <div>Timeleft:</div>
-              {timeLeft && humanizeDuration(timeLeft.toNumber() * 1000)}
+              {timeLeft && humanizeDuration(timeLeft * 1000)}
             </div>
 
             <div style={{ padding: 8 }}>
@@ -637,13 +665,7 @@ function App(props) {
 
       <div style={{ marginTop: 32, opacity: 0.5 }}>
         {/* Add your address here */}
-        Created by <Address value={"Your...address"} ensProvider={mainnetProvider} fontSize={16} />
-      </div>
-
-      <div style={{ marginTop: 32, opacity: 0.5 }}>
-        <a target="_blank" style={{ padding: 32, color: "#000" }} href="https://github.com/scaffold-eth/scaffold-eth">
-          🍴 Fork me!
-        </a>
+        Created by Coda
       </div>
 
       {/* 🗺 Extra UI like gas price, eth price, faucet, and support: */}
