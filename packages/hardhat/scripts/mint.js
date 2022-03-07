@@ -6,22 +6,31 @@ const { utils } = require("ethers");
 const R = require("ramda");
 const ipfsAPI = require("ipfs-http-client");
 
+const projectId = process.env.IPFS_INFURA_KEY;
+const projectSecret = process.env.IPFS_DEPLOYER_PRIV_KEY;
+const auth =
+  "Basic " + Buffer.from(projectId + ":" + projectSecret).toString("base64");
+
 const ipfs = ipfsAPI({
   host: "ipfs.infura.io",
   port: "5001",
   protocol: "https",
+  headers: {
+    authorization: auth,
+  },
 });
 
 const delayMS = 1000; // sometimes xDAI needs a 6000ms break lol 😅
 
 const main = async () => {
   // ADDRESS TO MINT TO:
-  const toAddress = "YOUR_FRONTEND_ADDRESS";
+  const toAddress = "0x3C06b3691956496B6622aE8B75c6319164f22E78";
 
   console.log("\n\n 🎫 Minting to " + toAddress + "...\n");
 
   const { deployer } = await getNamedAccounts();
   const yourCollectible = await ethers.getContract("YourCollectible", deployer);
+  console.log(yourCollectible);
 
   const buffalo = {
     description: "It's actually a bison?",
