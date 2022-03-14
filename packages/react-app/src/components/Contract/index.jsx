@@ -70,8 +70,8 @@ export default function Contract({
   const displayedContractFunctions = useMemo(() => {
     const results = contract
       ? Object.entries(contract.interface.functions).filter(
-          fn => fn[1]["type"] === "function" && !(show && show.indexOf(fn[1]["name"]) < 0),
-        )
+        fn => fn[1]["type"] === "function" && !(show && show.indexOf(fn[1]["name"]) < 0),
+      )
       : [];
     return results;
   }, [contract, show]);
