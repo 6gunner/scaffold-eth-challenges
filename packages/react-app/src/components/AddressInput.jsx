@@ -172,9 +172,10 @@ export default function AddressInput(props) {
   const x = parseInt(part1, 16) % 100;
   const y = parseInt(part2, 16) % 100;
 
-  props.hoistScanner(() => {
-    setScan(!scan);
-  });
+  props.hoistScanner &&
+    props.hoistScanner(() => {
+      setScan(!scan);
+    });
 
   return (
     <div>

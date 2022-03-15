@@ -20,9 +20,9 @@ module.exports = async ({ getNamedAccounts, deployments, getChainId }) => {
     "0xD0c535D4B6cFe3d3E11A4F3428Df0697C769920B"
   );
 
-  const result = await AuctionContract.administrators[
+  const result = await AuctionContract.administrators(
     "0xD0c535D4B6cFe3d3E11A4F3428Df0697C769920B"
-  ];
+  );
   console.log("添加管理员:" + result);
 
   await deploy("LazyNFT", {

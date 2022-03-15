@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { BrowserRouter, Link, Route, Switch } from "react-router-dom";
-import { Modal, Card, List, Alert, Button, Col, Menu, Row, InputNumber } from "antd";
+import { Modal, Card, List, Alert, Button, Col, Menu, Row, InputNumber, notification } from "antd";
 import { LinkOutlined } from "@ant-design/icons";
-import { utils } from "ethers";
+import { ethers, BigNumber, utils } from "ethers";
 import { StaticJsonRpcProvider, JsonRpcProvider, Web3Provider } from "@ethersproject/providers";
 import {
   useBalance,
@@ -31,9 +31,7 @@ import assets from "./assets.js";
 
 // styles
 import "antd/dist/antd.css";
-
 import "./App.css";
-const { ethers } = require("ethers");
 
 /// 📡 What chain are your contracts deployed to?
 const targetNetwork = NETWORKS.localhost; // <------- select your target frontend network (localhost, rinkeby, xdai, mainnet)
@@ -305,7 +303,7 @@ function App(props) {
     localProvider._network &&
     localProvider._network.chainId === 31337 &&
     yourLocalBalance &&
-    ethers.utils.formatEther(yourLocalBalance) <= 0
+    utils.formatEther(yourLocalBalance) <= 0
   ) {
     faucetHint = (
       <div style={{ padding: 16 }}>
@@ -349,17 +347,16 @@ function App(props) {
       let auctionInfo = {};
       let bidsInfo = {};
       try {
-        const uri = utils.id(assetHash);
-        console.log("assetHash:", assetHash, uri);
-        const tokenId = await readContracts.LazyNFT.uriToTokenId(uri);
-        try {
-          owner = await readContracts.LazyNFT.ownerOf(tokenId);
-        } catch {
-          owner = "";
-        }
+        const auctionId = utils.id(assetHash);
+        // const tokenId = await readContracts.LazyNFT.uriToTokenId(auctionId);
+        // try {
+        //   owner = await readContracts.LazyNFT.ownerOf(tokenId);
+        // } catch {
+        //   owner = "";
+        // }
         const nftAddress = readContracts.LazyNFT.address;
         try {
-          auctionInfo = await readContracts.Auction.getTokenAuctionDetails(nftAddress, uri);
+          auctionInfo = await readContracts.Auction.getTokenAuctionDetails(nftAddress, auctionId);
           forSale = auctionInfo.isActive;
         } catch {
           auctionInfo = {};
@@ -411,7 +408,7 @@ function App(props) {
   const placeBid = async (loadedAsset, ethAmount) => {
     const auctionId = utils.id(loadedAsset.id);
     const nftAddress = readContracts.LazyNFT.address;
-    const parsedAmount = parseEther(ethAmount.toString());
+    const parsedAmount = utils.parseEther(ethAmount.toString());
     const minPrice = loadedAsset.auctionInfo.startPrice;
 
     if (parsedAmount.lt(minPrice)) {
@@ -422,12 +419,7 @@ function App(props) {
       });
     }
     const lazyMinter = new LazyMinter({ contract: readContracts.Auction, signer: userSigner });
-    const voucher = await lazyMinter.createVoucher(
-      auctionId,
-      address,
-      parsedAmount,
-      "ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
-    );
+    const voucher = await lazyMinter.createVoucher(auctionId, parsedAmount, `ipfs://${loadedAsset.id}`);
 
     await fetch("http://localhost:8001/", {
       method: "POST",
@@ -436,11 +428,12 @@ function App(props) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        address: auctionId,
-        hash: voucher,
+        id: loadedAsset.id,
+        hash: voucher.signature,
         nft: nftAddress,
         bidder: address,
         amount: parsedAmount.toString(),
+        voucher,
       }),
     });
     updateAuctionList();
@@ -449,15 +442,15 @@ function App(props) {
   const handleOk = async () => {
     setModalVisible(false);
     const { price, duration } = auctionDetails;
-    const tokenHash = utils.id(auctionToken);
+    const auctionId = utils.id(auctionToken);
     // const tokenId = await readContracts.LazyNFT.uriToTokenId(utils.id(auctionToken));
     const nftAddress = readContracts.LazyNFT.address;
     const ethPrice = utils.parseEther(price.toString());
     const blockDuration = Math.floor(new Date().getTime() / 1000) + duration;
 
-    await tx(writeContracts.Auction.createTokenAuction(nftAddress, tokenHash, ethPrice, blockDuration, { gasPrice }));
+    await tx(writeContracts.Auction.createTokenAuction(nftAddress, auctionId, ethPrice, blockDuration, { gasPrice }));
 
-    const auctionInfo = await readContracts.Auction.getTokenAuctionDetails(nftAddress, tokenHash);
+    const auctionInfo = await readContracts.Auction.getTokenAuctionDetails(nftAddress, auctionId);
     console.log("auctionInfo", { auctionInfo });
     updateAuctionList();
   };
@@ -466,16 +459,56 @@ function App(props) {
     setModalVisible(false);
   };
 
+  const pickAsWinner = async (loadedAsset, bidInfo) => {
+    console.log("WINNER:", loadedAsset, bidInfo);
+    const nftAddress = readContracts.LazyNFT.address;
+    const auctionId = utils.id(bidInfo.id);
+    await tx(
+      writeContracts.Auction.pickAsWinner(nftAddress, auctionId, BigNumber.from(bidInfo.amount), bidInfo.bidder),
+    );
+    updateAuctionList();
+    // clearAuctionId(loadedAsset.id);
+  };
+
+  const clearAuctionId = async auctionId => {
+    await fetch("http://localhost:8001/clearAddress", {
+      method: "POST",
+      mode: "cors",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: auctionId,
+      }),
+    });
+    updateAuctionList();
+  };
+
   const cancelAuction = loadedAsset => {
     const auctionId = loadedAsset.id;
-    const { bidsInfo } = loadedAsset;
+    const bidsInfo = loadedAsset.bidsInfo;
     return async () => {
       // const tokenId = await readContracts.Auction.uriToTokenId(utils.id(auctionId));
       const nftAddress = readContracts.LazyNFT.address;
       await tx(writeContracts.Auction.cancelAuction(nftAddress, utils.id(auctionId)));
-      updateAuctionList();
-      // clearTokenUri(auctionId);
+      clearAuctionId(auctionId);
     };
+  };
+
+  const claim = async loadedAsset => {
+    const auctionId = loadedAsset.id;
+    let voucher = {};
+    Object.entries(loadedAsset.bidsInfo).forEach(([_, bidInfo]) => {
+      if (bidInfo.bidder == address && bidInfo.amount == loadedAsset.auctionInfo.bidderPrice.toString()) {
+        voucher = bidInfo.voucher;
+      }
+    });
+    debugger;
+    const nftAddress = readContracts.LazyNFT.address;
+    await tx(writeContracts.Auction.redeem(nftAddress, utils.id(auctionId), voucher), {
+      value: loadedAsset.auctionInfo.bidderPrice.toString(),
+    });
+    // clearAuctionId(auctionId);
   };
 
   let galleryList = [];
@@ -485,7 +518,6 @@ function App(props) {
     const { owner, bidsInfo, auctionInfo } = item;
     const deadline = auctionInfo.duration ? new Date(auctionInfo.duration * 1000) : new Date();
     const isEnded = deadline <= new Date();
-    debugger;
     cardActions.push(
       <div className="cardAction">
         {auctionInfo && owner ? (
@@ -506,7 +538,6 @@ function App(props) {
         ) : (
           ""
         )}
-        {/*{item.auctionInfo.isActive && address === item.auctionInfo.seller && <><Button style={{ marginBottom: "10px" }} onClick={completeAuction(item.id)}>Complete auction</Button><br/></>}*/}
         {item.auctionInfo.isActive && address === item.auctionInfo.seller && (
           <>
             <Button style={{ marginBottom: "10px" }} onClick={cancelAuction(item)}>
@@ -544,7 +575,7 @@ function App(props) {
             )}
           </div>
 
-          {auctionInfo.seller !== address ? (
+          {!isEnded && auctionInfo.isActive && auctionInfo.seller !== address ? (
             <div>
               <div style={{ display: "flex", alignItems: "center", marginTop: "20px" }}>
                 <p style={{ margin: 0, marginRight: "15px" }}>Your bid in ETH: </p>
@@ -563,8 +594,12 @@ function App(props) {
                 {isBidderIncluded(bidsInfo) ? "You already made a bid" : "Place a bid"}
               </Button>
             </div>
+          ) : auctionInfo.redeemer === address ? (
+            <Button style={{ marginTop: "7px", marginBottom: "20px" }} onClick={() => claim(item)}>
+              Claim
+            </Button>
           ) : (
-            <b>You are selling this item</b>
+            ""
           )}
 
           {item.auctionInfo.isActive && (
@@ -578,9 +613,9 @@ function App(props) {
                     blockExplorer={blockExplorer}
                     minimized={true}
                   />
-                  <p style={{ margin: 0 }}>{formatEther(bidInfo.amount)} ETH</p>
+                  <p style={{ margin: 0 }}>{utils.formatEther(bidInfo.amount)} ETH</p>
                   {address === item.auctionInfo.seller && (
-                    <Button disabled={!isEnded} onClick={() => completeAuction(item, bidInfo)}>
+                    <Button disabled={!isEnded} onClick={() => pickAsWinner(item, bidInfo)}>
                       Pick as a winner
                     </Button>
                   )}

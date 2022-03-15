@@ -5,6 +5,7 @@ import "hardhat/console.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import "@openzeppelin/contracts/utils/cryptography/draft-EIP712.sol";
 
 contract LazyNFT is ERC721URIStorage, AccessControl {
     using Counters for Counters.Counter;
@@ -12,7 +13,7 @@ contract LazyNFT is ERC721URIStorage, AccessControl {
 
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
-    mapping(bytes32 => uint256) public uriToTokenId;
+    mapping(bytes32 => uint256) public auctionIdToTokenId;
 
     constructor(address payable minter) ERC721("LazyNFT", "LazyNFT") {
         // 设置只有某一个地址有权限mint
@@ -21,13 +22,13 @@ contract LazyNFT is ERC721URIStorage, AccessControl {
 
     function mint(string memory metadataURI) public returns (uint256) {
         require(hasRole(MINTER_ROLE, msg.sender), "unauthorized");
-
+        console.log(metadataURI);
         bytes32 uriHash = keccak256(abi.encodePacked(metadataURI));
         _tokenCounter.increment();
         uint256 tokenId = _tokenCounter.current();
         _safeMint(msg.sender, tokenId);
         _setTokenURI(tokenId, metadataURI);
-        uriToTokenId[uriHash] = tokenId;
+        // auctionIdToTokenId[uriHash] = tokenId;
         return tokenId;
     }
 
