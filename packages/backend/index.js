@@ -34,7 +34,7 @@ app.post("/", function (request, response) {
   if (!transactions[request.body.id]) {
     transactions[request.body.id] = {};
   }
-  transactions[request.body.id][request.body.hash] = request.body;
+  transactions[request.body.id][request.body.bidder] = request.body;
   console.log("transactions", transactions);
 });
 

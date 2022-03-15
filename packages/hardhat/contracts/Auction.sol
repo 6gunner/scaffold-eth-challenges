@@ -12,7 +12,9 @@ import "@openzeppelin/contracts/utils/cryptography/draft-EIP712.sol";
 import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 
 interface LazyNFTERC721 {
-    function mint(string memory uri) external returns (uint256);
+    function mint(string memory auctionId, string memory uri)
+        external
+        returns (uint256);
 }
 
 contract Auction is IERC721Receiver, EIP712, Ownable {
@@ -23,6 +25,13 @@ contract Auction is IERC721Receiver, EIP712, Ownable {
 
     constructor() EIP712(SIGNING_DOMAIN, SIGNATURE_VERSION) {}
 
+    struct NFTVoucher {
+        string auctionId;
+        uint256 bidPrice;
+        string uri;
+        bytes signature;
+    }
+
     struct AuctionDetails {
         address seller;
         uint256 startPrice;
@@ -31,19 +40,16 @@ contract Auction is IERC721Receiver, EIP712, Ownable {
         address bidder;
         uint256 bidPrice;
         bool isActive;
-    }
-
-    struct NFTVoucher {
-        string auctionId;
-        uint256 bidPrice;
-        string uri;
-        bytes signature;
+        bool isEnd;
+        uint256 tokenId;
     }
 
     mapping(address => bool) public administrators;
 
     mapping(address => mapping(string => AuctionDetails))
         public auctionIdToAuction;
+
+    mapping(address => mapping(string => NFTVoucher)) public auctionIdToVoucher;
 
     modifier onlyAdmin() {
         require(
@@ -71,9 +77,11 @@ contract Auction is IERC721Receiver, EIP712, Ownable {
             seller: msg.sender,
             startPrice: uint128(_price),
             duration: _duration,
+            isActive: true,
             bidder: address(0),
             bidPrice: uint128(_price),
-            isActive: true
+            isEnd: false,
+            tokenId: 0
         });
         auctionIdToAuction[_nftAddress][_auctionId] = _auction;
     }
@@ -101,16 +109,21 @@ contract Auction is IERC721Receiver, EIP712, Ownable {
     function pickAsWinner(
         address _nftAddress,
         string memory _auctionId,
-        uint256 price,
-        address bidder
+        address _bidder,
+        NFTVoucher calldata voucher
     ) external {
         AuctionDetails storage auction = auctionIdToAuction[_nftAddress][
             _auctionId
         ];
+        require(auction.isActive, "auction is not active");
+        require(block.timestamp >= auction.duration, "auction not end");
+        require(msg.sender == auction.seller, "not the seller");
+        auction.bidder = _bidder;
+        auction.bidPrice = voucher.bidPrice;
+        auction.isActive = true;
+        auction.isEnd = true;
 
-        require(msg.sender == auction.seller);
-        auction.bidder = bidder;
-        auction.bidPrice = price;
+        auctionIdToVoucher[_nftAddress][_auctionId] = voucher;
     }
 
     function _hash(NFTVoucher calldata voucher)
@@ -181,25 +194,23 @@ contract Auction is IERC721Receiver, EIP712, Ownable {
         //     voucher.signature
         // );
         address signer = _verify(voucher);
-        console.log("msgSender=");
-        console.log(msg.sender);
-        console.log("signer=");
-        console.logAddress(signer);
         require(msg.sender == signer, "Invalid signature");
 
-        // AuctionDetails storage auction = auctionIdToAuction[_nftAddress][
-        //     _auctionId
-        // ];
-        // console.logBytes32(_auctionId);
-        // require(msg.value >= auction.bidPrice, "Insufficient funds to redeem");
-        // require(msg.sender == auction.bidder, "NOT the winner");
+        AuctionDetails storage auction = auctionIdToAuction[_nftAddress][
+            _auctionId
+        ];
+        require(msg.value >= auction.bidPrice, "Insufficient funds to redeem");
+        require(msg.sender == auction.bidder, "NOT the winner");
         // 先铸币到当前合约地址上
-        // uint256 tokenId = LazyNFTERC721(_nftAddress).mint(voucher.uri);
-        // address owner = msg.sender;
-        // ERC721(_nftAddress).safeTransferFrom(address(this), owner, tokenId);
-        // (bool success, ) = auction.seller.call{value: auction.bidPrice}("");
-        // require(success);
-        uint256 tokenId = 2;
+        uint256 tokenId = LazyNFTERC721(_nftAddress).mint(
+            _auctionId,
+            voucher.uri
+        );
+        address owner = msg.sender;
+        ERC721(_nftAddress).safeTransferFrom(address(this), owner, tokenId);
+        (bool success, ) = auction.seller.call{value: auction.bidPrice}("");
+        require(success);
+        auction.tokenId = tokenId;
         return tokenId;
     }
 

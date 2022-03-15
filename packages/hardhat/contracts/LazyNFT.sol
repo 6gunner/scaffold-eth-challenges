@@ -13,22 +13,26 @@ contract LazyNFT is ERC721URIStorage, AccessControl {
 
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
-    mapping(bytes32 => uint256) public auctionIdToTokenId;
+    mapping(string => uint256) public auctionIdToTokenId;
 
-    constructor(address payable minter) ERC721("LazyNFT", "LazyNFT") {
+    constructor(address payable minter) ERC721("LazyNFT", "LZT") {
         // 设置只有某一个地址有权限mint
         _setupRole(MINTER_ROLE, minter);
     }
 
-    function mint(string memory metadataURI) public returns (uint256) {
+    function mint(string memory auctionId, string memory metadataURI)
+        public
+        returns (uint256)
+    {
         require(hasRole(MINTER_ROLE, msg.sender), "unauthorized");
-        console.log(metadataURI);
-        bytes32 uriHash = keccak256(abi.encodePacked(metadataURI));
         _tokenCounter.increment();
         uint256 tokenId = _tokenCounter.current();
+        if (tokenId == 0) {
+            _tokenCounter.increment();
+        }
         _safeMint(msg.sender, tokenId);
         _setTokenURI(tokenId, metadataURI);
-        // auctionIdToTokenId[uriHash] = tokenId;
+        auctionIdToTokenId[auctionId] = tokenId;
         return tokenId;
     }
 

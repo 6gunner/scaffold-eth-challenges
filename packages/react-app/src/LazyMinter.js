@@ -1,4 +1,4 @@
-import ethers from "ethers";
+import { ethers } from "ethers";
 
 // These constants must match the ones used in the smart contract.
 const SIGNING_DOMAIN_NAME = "LazyNFT-Voucher";
@@ -25,17 +25,26 @@ class LazyMinter {
 
    * @returns {NFTVoucher}
    */
-  async createVoucher(auctionId, minPrice = 0, uri) {
-    const voucher = { auctionId, minPrice, uri };
+  async createVoucher(auctionId, bidPrice, uri) {
+    const voucher = { auctionId, bidPrice, uri };
     const domain = await this._signingDomain();
+
     const types = {
       NFTVoucher: [
-        { name: "auctionId", type: "bytes32" },
-        { name: "minPrice", type: "uint256" },
+        { name: "auctionId", type: "string" },
+        { name: "bidPrice", type: "uint256" },
         { name: "uri", type: "string" },
       ],
     };
     const signature = await this.signer._signTypedData(domain, types, voucher);
+
+    const recoveredAddress = ethers.utils.verifyTypedData(domain, types, voucher, signature);
+
+    // const expectedSignerAddress = this.signer.address;
+    // assert(recoveredAddress === expectedSignerAddress);
+
+    console.log("recoveredAddress = " + recoveredAddress);
+
     return {
       ...voucher,
       signature,

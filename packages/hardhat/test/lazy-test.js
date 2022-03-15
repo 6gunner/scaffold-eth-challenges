@@ -87,15 +87,18 @@ describe("LazyNFT", function () {
       redeemer.address
     );
 
-    const tokenId = await redeemerAuctionContract.redeem(
-      lazyNftContract.address,
-      auctionId,
-      voucher,
-      {
-        value: ethers.utils.parseEther("0.1"),
-      }
-    );
-    console.log("tokenId:", tokenId);
+    await expect(
+      redeemerAuctionContract.redeem(
+        lazyNftContract.address,
+        auctionId,
+        voucher,
+        {
+          value: ethers.utils.parseEther("0.1"),
+        }
+      )
+    )
+      .to.emit(lazyNftContract, "Transfer") // transfer from null address to auctionContract
+      .and.to.emit(lazyNftContract, "Transfer"); // transfer from minter to redeemer
   });
 
   // it("Should fail to redeem an NFT that's already been claimed", async function () {
